@@ -5,18 +5,40 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "parser.h"
+
 void handle_client(int client_fd) {
     char buf[4096];
     memset(buf, 0, sizeof(buf));
 
     ssize_t bytes_read = read(client_fd, buf, sizeof(buf) - 1);
-    if (bytes_read <= 0) {
+    if (bytes_read <= 0) return;
+
+    HttpRequest req;
+    ParseResult result = parse_request(buf, bytes_read, &req);
+
+    if (result != PARSE_OK) {
+        const char *bad_request =
+            "HTTP/1.1 400 Bad Request\r\n"
+            "Content-Length: 11\r\n"
+            "\r\n"
+            "Bad Request";
+        write(client_fd, bad_request, strlen(bad_request));
         return;
     }
 
-    printf("Received:\n%s\n", buf);
+    // print what we parsed
+    printf("Method:  %s\n", req.method);
+    printf("Path:    %s\n", req.path);
+    printf("Version: %s\n", req.version);
+    printf("Headers: %d\n", req.header_count);
+    for (int i = 0; i < req.header_count; i++) {
+        printf("  %s: %s\n", req.headers[i].key, req.headers[i].value);
+    }
+    if (req.body) {
+        printf("Body: %.*s\n", (int)req.body_len, req.body);
+    }
 
-    // send a raw HTTP response
     const char *response =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/plain\r\n"
